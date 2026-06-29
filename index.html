@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>Max Color Paint-Man</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#10131a;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;touch-action:none;}
+  #wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at top,#253044,#0a0d13 70%)}
+  #top{width:min(96vw,620px);display:flex;justify-content:space-between;align-items:center;margin:8px 0 6px;font-weight:800;letter-spacing:.3px}
+  #game{width:min(96vw,620px);height:min(76vh,620px);max-height:calc(100vh - 150px);border:3px solid #e93535;border-radius:18px;background:#07101e;box-shadow:0 0 24px rgba(233,53,53,.25);touch-action:none;}
+  #controls{display:grid;grid-template-columns:64px 64px 64px;grid-template-rows:54px 54px 54px;gap:8px;margin-top:10px;user-select:none}
+  .btn{border:none;border-radius:16px;background:#e93535;color:#fff;font-size:28px;font-weight:900;box-shadow:0 5px 0 #8b1d1d;display:flex;align-items:center;justify-content:center}
+  .btn:active{transform:translateY(4px);box-shadow:0 1px 0 #8b1d1d}.empty{visibility:hidden}
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.74);display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:5}
+  .card{max-width:430px;background:#fff;color:#111;border-radius:22px;padding:24px;box-shadow:0 20px 80px #000}
+  .card h1{margin:0 0 8px;color:#e93535}.card p{margin:8px 0 18px;line-height:1.35}.play{background:#e93535;color:#fff;border:0;border-radius:14px;font-size:20px;font-weight:900;padding:14px 26px}
+  @media (min-width:700px){#controls{display:none}#game{height:min(86vh,620px)}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="top"><div>🪣 MAX COLOR</div><div>Puntos: <span id="score">0</span></div><div>Vidas: <span id="lives">3</span></div></div>
+  <canvas id="game" width="560" height="560"></canvas>
+  <div id="controls">
+    <button class="btn empty"></button><button class="btn" data-dir="up">▲</button><button class="btn empty"></button>
+    <button class="btn" data-dir="left">◀</button><button class="btn empty"></button><button class="btn" data-dir="right">▶</button>
+    <button class="btn empty"></button><button class="btn" data-dir="down">▼</button><button class="btn empty"></button>
+  </div>
+</div>
+<div id="overlay"><div class="card"><h1>Paint-Man Max Color</h1><p>Mueve tu cubo MAX COLOR, recoge todas las brochas y esquiva los cubos rivales.</p><p>En móvil usa los botones o desliza en la pantalla.</p><button class="play" id="start">Jugar</button></div></div>
+<script>
+const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score'), livesEl=document.getElementById('lives'), overlay=document.getElementById('overlay'), startBtn=document.getElementById('start');
+const playerImg=new Image(); playerImg.src='player-bucket.png';
+const brushImgs=['brush-red.png','brush-yellow.png','brush-blue.png','brush-green.png','brush-purple.png'].map(s=>{let i=new Image();i.src=s;return i});
+const tile=28, cols=20, rows=20;
+const raw=[
+'11111111111111111111',
+'10000000010000000001',
+'10111111010111111001',
+'10000000000000000001',
+'10110111111111011001',
+'10010000010000010001',
+'11110111010111011111',
+'10000100000001000001',
+'10111101111101111001',
+'10000001000001000001',
+'10111101111101111001',
+'10000100000001000001',
+'11110111010111011111',
+'10010000010000010001',
+'10110111111111011001',
+'10000000000000000001',
+'10111111010111111001',
+'10000000010000000001',
+'10000000000000000001',
+'11111111111111111111'];
+let grid=raw.map(r=>r.split('').map(Number));
+let pellets=[], player, enemies, score=0, lives=3, running=false, win=false;
+function reset(){score=0;lives=3;win=false;scoreEl.textContent=score;livesEl.textContent=lives; newRound(true)}
+function newRound(makePellets=false){
+ player={x:1,y:1,dir:{x:1,y:0},next:{x:1,y:0},px:1*tile,py:1*tile,speed:2.5};
+ enemies=[{x:18,y:1,px:18*tile,py:tile,color:'#00a2ff',dir:{x:-1,y:0},speed:1.7},{x:18,y:18,px:18*tile,py:18*tile,color:'#ffcc00',dir:{x:-1,y:0},speed:1.55},{x:1,y:18,px:tile,py:18*tile,color:'#7cff4d',dir:{x:1,y:0},speed:1.45}];
+ if(makePellets){pellets=[]; for(let y=1;y<rows-1;y++)for(let x=1;x<cols-1;x++) if(grid[y][x]===0 && !(x===1&&y===1) && !(x>16&&y<3)) pellets.push({x,y,type:Math.floor(Math.random()*brushImgs.length),eaten:false});}
+}
+function can(x,y){return x>=0&&y>=0&&x<cols&&y<rows&&grid[y][x]===0}
+function setDir(d){const m={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}}; player.next=m[d]||player.next}
+document.querySelectorAll('[data-dir]').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();setDir(b.dataset.dir)}));
+window.addEventListener('keydown',e=>{if(e.key.includes('Arrow'))setDir(e.key.replace('Arrow','').toLowerCase())});
+let sx=0,sy=0; canvas.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY}); canvas.addEventListener('pointerup',e=>{let dx=e.clientX-sx,dy=e.clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))>20)setDir(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'))});
+startBtn.onclick=()=>{overlay.style.display='none'; reset(); running=true; requestAnimationFrame(loop)};
+function moveEntity(o, ai=false){
+ if(Math.abs(o.px-o.x*tile)<3 && Math.abs(o.py-o.y*tile)<3){ o.px=o.x*tile;o.py=o.y*tile;
+  if(ai){let dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(d=>can(o.x+d.x,o.y+d.y) && !(d.x===-o.dir.x&&d.y===-o.dir.y)); if(Math.random()<.55) dirs.sort((a,b)=>Math.hypot(player.x-(o.x+a.x),player.y-(o.y+a.y))-Math.hypot(player.x-(o.x+b.x),player.y-(o.y+b.y))); o.dir=dirs[0]||{x:-o.dir.x,y:-o.dir.y};}
+  else { if(can(o.x+player.next.x,o.y+player.next.y)) o.dir=player.next; if(!can(o.x+o.dir.x,o.y+o.dir.y)) o.dir={x:0,y:0};}
+  if(can(o.x+o.dir.x,o.y+o.dir.y)){o.x+=o.dir.x;o.y+=o.dir.y;}
+ }
+ o.px += Math.sign(o.x*tile-o.px)*Math.min(o.speed,Math.abs(o.x*tile-o.px)); o.py += Math.sign(o.y*tile-o.py)*Math.min(o.speed,Math.abs(o.y*tile-o.py));
+}
+function update(){ moveEntity(player); enemies.forEach(e=>moveEntity(e,true));
+ pellets.forEach(p=>{if(!p.eaten && p.x===player.x && p.y===player.y){p.eaten=true;score+=10;scoreEl.textContent=score;}});
+ if(pellets.every(p=>p.eaten)){win=true; running=false; showEnd('¡Has ganado! 🎨','Has recogido todas las brochas.');}
+ for(const e of enemies){if(Math.hypot(e.px-player.px,e.py-player.py)<20){lives--;livesEl.textContent=lives;if(lives<=0){running=false;showEnd('Game over','Los cubos rivales te han pillado.');} else newRound(false);break;}}
+}
+function drawBucket(x,y,color){ctx.save();ctx.translate(x+tile/2,y+tile/2);ctx.fillStyle=color;ctx.strokeStyle='white';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(-12,-12,24,24,5);ctx.fill();ctx.stroke();ctx.fillStyle='rgba(255,255,255,.35)';ctx.fillRect(-9,-9,18,5);ctx.fillStyle='white';ctx.font='9px system-ui';ctx.textAlign='center';ctx.fillText('PAINT',0,4);ctx.restore()}
+function draw(){ctx.clearRect(0,0,560,560);ctx.fillStyle='#07101e';ctx.fillRect(0,0,560,560);
+ for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)if(grid[y][x]){ctx.fillStyle='#163f8f';ctx.fillRect(x*tile,y*tile,tile,tile);ctx.strokeStyle='#2b76ff';ctx.strokeRect(x*tile+2,y*tile+2,tile-4,tile-4)}
+ pellets.forEach(p=>{if(!p.eaten){let im=brushImgs[p.type];ctx.drawImage(im,p.x*tile+5,p.y*tile+5,18,18)}});
+ ctx.drawImage(playerImg,player.px-3,player.py-8,34,38); enemies.forEach(e=>drawBucket(e.px,e.py,e.color));
+}
+function loop(){if(running){update();draw();requestAnimationFrame(loop)}}
+function showEnd(title,msg){overlay.style.display='flex';overlay.querySelector('h1').textContent=title;overlay.querySelector('p').innerHTML=msg+'<br>Puntos: '+score;startBtn.textContent='Jugar otra vez';}
+if(CanvasRenderingContext2D.prototype.roundRect===undefined){CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){this.beginPath();this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);this.closePath();return this}}
+</script>
+</body>
+</html>
